@@ -1681,7 +1681,9 @@ class RelativeReasoning(ReviewableEnviPathObject):
                evaluation_packages: List[Package] = None,
                fingerprinter_type: FingerprinterType = FingerprinterType.ENVIPATH_FINGERPRINTER,
                quickbuild: bool = True, use_p_cut: bool = False, cut_off: float = 0.5,
-               evaluate_later: bool = True, name: str = None) -> 'RelativeReasoning':
+               evaluate_later: bool = True, name: str = None, build_applicability_domain: bool = False,
+               ad_k: int = 5, ad_local_compatibility_threshold: float = 0.5,
+               ad_reliability_threshold: float = 0.5) -> 'RelativeReasoning':
 
         """
         Create a relative reasoning object
@@ -1709,6 +1711,10 @@ class RelativeReasoning(ReviewableEnviPathObject):
         :param cut_off: The cutoff threshold used in the evaluation. Default: 0.5
         :param evaluate_later: Only build the model, and not proceed to evaluation. Default: False
         :param name:  Name of the model
+        :param build_applicability_domain: Boolean flag denoting whether a ApplicabilityDomain should be built or not. Default: False
+        :param ad_k: The number of neighbours to be considered. Default: 5
+        :param ad_local_compatibility_threshold: The local compatibility threshold to use. Default: 0.5
+        :param ad_reliability_threshold: The reliability threshold to use. Default: 0.5
         :return: RelativeReasoning object
         """
 
@@ -1731,6 +1737,13 @@ class RelativeReasoning(ReviewableEnviPathObject):
 
         if name:
             payload['modelName'] = name
+
+        # Add ApplicabilityDomain params in case the RelativeReasoning should include such
+        if build_applicability_domain:
+            payload['buildAD'] = 'on'
+            payload['adK'] = ad_k
+            payload['localCompatibilityThreshold'] = ad_local_compatibility_threshold
+            payload['reliabilityThreshold'] = ad_reliability_threshold
 
         url = '{}/{}'.format(package.get_id(), Endpoint.RELATIVEREASONING.value)
         res = package.requester.post_request(url, payload=payload, allow_redirects=False)
@@ -1781,6 +1794,49 @@ class RelativeReasoning(ReviewableEnviPathObject):
         res = self.requester.post_request(self.get_id(), payload=payload)
         res.raise_for_status()
         return RelativeReasoning(self.requester, id=res.url)
+
+    def get_applicability_domain(self) -> Optional['ApplicabilityDomain']:
+        """
+        Gets the ApplicabilityDomain if attached, None otherwise.
+        """
+        try:
+            ad_data = self._get('appdomain')
+            return ApplicabilityDomain(self.requester, id=ad_data['id'])
+        except ValueError:
+            # This object has no ApplicabilityDomain attached...
+            return None
+
+
+class ApplicabilityDomain(ReviewableEnviPathObject):
+
+    @staticmethod
+    def create(relative_reasoning: RelativeReasoning, ad_k: int = 5,
+               ad_local_compatibilty_threshold: float = 0.5, ad_reliability_threshold: float = 0.5):
+        payload = {
+            'adK': ad_k,
+            'localCompatibilityThreshold': ad_local_compatibilty_threshold,
+            'reliabilityThreshold': ad_reliability_threshold,
+        }
+
+        url = '{}/{}'.format(relative_reasoning.get_id(), Endpoint.APPLICABILITYDOMAIN.value)
+        res = relative_reasoning.requester.post_request(url, payload=payload, allow_redirects=False)
+        res.raise_for_status()
+        return ApplicabilityDomain(relative_reasoning.requester, id=res.headers['Location'])
+
+    def get_ad_stats_for_compounds_structure(self,
+                                             compounds_structure: CompoundStructure) -> 'ApplicabilityDomainResult':
+        return self.get_ad_stats_for_smiles(compounds_structure.get_smiles())
+
+    def get_ad_stats_for_smiles(self, smiles: str) -> 'ApplicabilityDomainResult':
+        payload = {
+            'smiles': smiles
+        }
+        res = self.requester.post_request(self.id, payload=payload).json()
+        return res
+
+    def copy(self, package: 'Package'):
+        # TODO
+        pass
 
 
 class Node(ReviewableEnviPathObject):
