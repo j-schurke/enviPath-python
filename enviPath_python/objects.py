@@ -18,6 +18,7 @@ import re
 import json
 from abc import ABC, abstractmethod
 from collections import namedtuple, defaultdict
+from dataclasses import dataclass
 from io import BytesIO
 from typing import List, Optional, Union
 from enviPath_python.enums import Endpoint, ClassifierType, FingerprinterType, AssociationType, EvaluationType, \
@@ -1823,20 +1824,100 @@ class ApplicabilityDomain(ReviewableEnviPathObject):
         res.raise_for_status()
         return ApplicabilityDomain(relative_reasoning.requester, id=res.headers['Location'])
 
-    def get_ad_stats_for_compounds_structure(self,
-                                             compounds_structure: CompoundStructure) -> 'ApplicabilityDomainResult':
+    def get_ad_stats_for_compound_structure(self,
+                                            compounds_structure: CompoundStructure) -> 'ADResult':
         return self.get_ad_stats_for_smiles(compounds_structure.get_smiles())
 
-    def get_ad_stats_for_smiles(self, smiles: str) -> 'ApplicabilityDomainResult':
+    def get_ad_stats_for_smiles(self, smiles: str) -> 'ADResult':
         payload = {
             'smiles': smiles
         }
         res = self.requester.post_request(self.id, payload=payload).json()
-        return res
+        return ADResult(self, smiles, res)
 
-    def copy(self, package: 'Package'):
-        # TODO
-        pass
+    def copy(self, package: 'Package', debug=False):
+        raise ValueError("Copying ApplicabilityDomain is not supported yet!")
+
+
+@dataclass
+class ExperimentalPathway:
+    pathway: 'Pathway'
+    rule_triggered: bool
+
+
+@dataclass
+class Neighbour:
+    structure: 'CompoundStructure'
+    observed: bool  # True if len(pathways) > 0
+    triggered: bool  # True if rule triggers on structure
+    probability: float
+    pathways: List['ExperimentalPathway']  # List of pathways the neighbour appears in
+
+
+@dataclass
+class Transformation:
+    """This is a test class for dataclasses.
+
+    This is the body of the docstring description.
+
+    Args:
+        var_int (int): An integer.
+        var_str (str): A string.
+
+    """
+    rule: 'Rule'
+    probability: float
+    reliability: float
+    compatibility: float
+    times_triggered: int
+    neighbours: List['Neighbour']
+    over_rr_threshold: bool
+
+
+class ADResult(object):
+
+    def __init__(self, ad: 'ApplicabilityDomain', smiles: str, data: dict):
+        self.ad = ad
+        self.smiles = smiles
+        self._data = data
+        self.transformations = []
+        self._parse(self._data['transformations'])
+
+    def _parse(self, transformations):
+        for t in transformations:
+            # Collect base stuff
+            over_rr_threshold = t['isPredicted']
+            rule = Rule.get_rule_type(t['rule'])(self.ad.requester, id=t['rule']['id'])
+            probability = float(t['predictedEdge']['probability'])
+            reliability = float(t['reliability'])
+            compatibility = float(t['localCompatibility'])
+            times_triggered = int(t['timesTriggered'])
+
+            neighbours = []
+            for n in t['neighbours']:
+                cs = CompoundStructure(self.ad.requester, id=n['structure']['id'])
+                n_triggered = n['triggered']
+                n_probability = float(n['probability'])
+
+                exp_pws = []
+                for exp in n['experimentalPathways']:
+                    pw = Pathway(self.ad.requester, id=exp['id'])
+                    pw_observed = exp['observed']
+                    exp_pws.append(ExperimentalPathway(pw, pw_observed))
+
+                n_observed = len(exp_pws) > 0
+
+                neighbours.append(
+                    Neighbour(cs, n_observed, n_triggered, n_probability, exp_pws)
+                )
+
+            self.transformations.append(
+                Transformation(rule, probability, reliability, compatibility, times_triggered, neighbours,
+                               over_rr_threshold)
+            )
+
+    def is_in_ad(self):
+        return self._data['adAssessment']['inAD']
 
 
 class Node(ReviewableEnviPathObject):

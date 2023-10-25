@@ -246,6 +246,15 @@ class enviPath(object):
         """
         return self.requester.get_objects(self.BASE_URL, Endpoint.SCENARIO)
 
+    def get_relative_reasoning(self, relative_reasoning_id) -> 'RelativeReasoning':
+        """
+        Gets a RelativeReasoning denoted by the id.
+
+        :return: RelativeReasoning object.
+        :rtype: RelativeReasoning
+        """
+        return RelativeReasoning(self.requester, **self.requester.get_json(relative_reasoning_id))
+
     def get_setting(self, setting_id) -> Setting:
         """
         Get the setting with identifier `setting_id`
