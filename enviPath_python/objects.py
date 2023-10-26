@@ -628,9 +628,6 @@ class Package(enviPathObject):
             if debug:
                 print('Copying {}...'.format(pathway.get_id()), end='')
 
-            # if pathway.get_id() != 'http://localhost:8080/package/f444f7ae-b9b9-469c-bfa8-e7b83eba42a9/pathway/ee26b1b7-53e4-4a1b-b212-b78435e392de':
-            #     continue
-
             sub_mapping, _ = pathway.copy(target_package, debug=debug)
             for scen in pathway.get_scenarios():
                 scen_mapping[Pathway][pathway.get_id()].append(scen.get_id())
@@ -1841,37 +1838,28 @@ class ApplicabilityDomain(ReviewableEnviPathObject):
 
 @dataclass
 class ExperimentalPathway:
-    pathway: 'Pathway'
-    rule_triggered: bool
+    pathway: 'Pathway'  # The Pathway the neighbour is present
+    rule_triggered: bool  # Denoting whether the rule triggered on the neighbour in the above Pathway
 
 
 @dataclass
 class Neighbour:
-    structure: 'CompoundStructure'
+    structure: 'CompoundStructure'  # The neighbour
     observed: bool  # True if len(pathways) > 0
     triggered: bool  # True if rule triggers on structure
-    probability: float
+    probability: float  # The probability in case the rule triggers on the structure
     pathways: List['ExperimentalPathway']  # List of pathways the neighbour appears in
 
 
 @dataclass
 class Transformation:
-    """This is a test class for dataclasses.
-
-    This is the body of the docstring description.
-
-    Args:
-        var_int (int): An integer.
-        var_str (str): A string.
-
-    """
-    rule: 'Rule'
-    probability: float
-    reliability: float
-    compatibility: float
-    times_triggered: int
-    neighbours: List['Neighbour']
-    over_rr_threshold: bool
+    rule: 'Rule'  # The rule
+    probability: float  # The probability
+    reliability: float  # The reliability
+    compatibility: float  # the local compatibility
+    times_triggered: int  # How often the rule triggered in the train data set
+    neighbours: List['Neighbour']  # List of neighbours
+    over_rr_threshold: bool  # Denotes whether the rules is above the model threshold
 
 
 class ADResult(object):
@@ -2513,8 +2501,7 @@ class Pathway(ReviewableEnviPathObject):
         for edge in self.get_edges():
             educts = [node_mapping[x.get_id()] for x in edge.get_start_nodes()]
             products = [node_mapping[x.get_id()] for x in edge.get_end_nodes()]
-            if self.get_id() == 'http://localhost:8080/package/f444f7ae-b9b9-469c-bfa8-e7b83eba42a9/pathway/ee26b1b7-53e4-4a1b-b212-b78435e392de':
-                print(edge.get_reaction().is_multistep())
+
             copied_edge = Edge.create(copied_pathway, educts=educts, products=products,
                                       multistep=edge.get_reaction().is_multistep())
             mapping[edge.get_id()] = copied_edge.get_id()
